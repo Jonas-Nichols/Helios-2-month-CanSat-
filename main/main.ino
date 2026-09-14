@@ -36,6 +36,7 @@ const int SDA = 4;
 
 // Other pins
 const int operationLight = 27;
+const int buzzer = 26
 
 float altitude = 0;
 int velocity;
@@ -70,10 +71,8 @@ String stage = 'launchPad';
 
 
 int setup() {
-  // TODO: create receiver function
 
     Wire.begin();
-
 
     // Set up bmp Sensor (Barometer and temperature)
     bmpSensor.begin_I2C();
@@ -99,6 +98,12 @@ int setup() {
 
     GNSS.setI2COutput(COM_TYPE_UBX); // Sets output to UBX only instead of the standard NMEA
     GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
+
+    // Start buzzer
+    pinMode(buzzer, OUTPUT);
+    digitalWrite(buzzer, HIGH);
+    delay(1000);
+    digitalWrite(buzzer, LOW);
 
 }
 
@@ -150,10 +155,10 @@ int loop() {
     // when stops falling
     if (altitude <= 10 || velocity < 1.8) {
 
+      digitalWrite(buzzer, HIGH);
       stage = 'landed';
 
     }
-
   }
 
   while (stage == 'landed') {
@@ -198,4 +203,5 @@ void sampleSensors() {
     lastGPSsample = millis();
   
   }
+
 }
