@@ -72,6 +72,9 @@ int setup() {
     sampleSensors();
     initalPressure = (bmpSensor.pressure / 100);
 
+  // Set pressure of current (lowest) altitude in Hpa
+  sampleSensors();
+  initalPressure = (bmpSensor.pressure / 100);
 
     // Set up bno Sensor (orintation and accelometer)
     bnoSensor.begin()
@@ -81,88 +84,79 @@ int setup() {
 
 
 int loop() {
-    stage = 'launchPad';
+  stage = 'launchPad';
 
-    while (stage =='launchPad')
-    {
+  while (stage == 'launchPad') {
 
-        sampleSensors();
-        saveData();
-        transmitTelemetry();
+    sampleSensors();
+    saveData();
+    transmitTelemetry();
 
-        if (altitude >= 10) {
-            stage = 'ascent';
-        }
-
+    if (altitude >= 10) {
+      stage = 'ascent';
     }
+  }
 
-    while (stage == 'ascent')
-    {
+  while (stage == 'ascent') {
 
-        sampleSensors();
-        saveData();
-        transmitTelemetry();
+    sampleSensors();
+    saveData();
+    transmitTelemetry();
 
-        if (altitude >= 530)
-        {
-            stage = 'apogee';
-        }
+    if (altitude >= 530) {
+      stage = 'apogee';
     }
+  }
 
-    while (stage == 'apogee')
-    {
-        release();
-        startExtensionTimer();
+  while (stage == 'apogee') {
+    release();
+    startExtensionTimer();
 
-        stage = 'decent';
+    stage = 'decent';
+  }
+
+  while (stage == 'decent') {
+    // receive commands
+    sampleSensors();
+    saveData();
+    transmitTelemetry();
+
+    if (altitude <= 10 || velocity < 1.8) {
+      stage = 'ascent';
     }
+  }
 
-    while (stage == 'decent')
-    {
-        // receive commands
-        sampleSensors();
-        saveData();
-        transmitTelemetry();
-
-        if (altitude <= 10 || velocity < 1.8)
-        {
-            stage = 'ascent';
-        }
-    }
-
-    while (stage == 'landed')
-    {
-        // receive commands
-        sampleSensors();
-        saveData();
-        transmitTelemetry();
-    }
+  while (stage == 'landed') {
+    // receive commands
+    sampleSensors();
+    saveData();
+    transmitTelemetry();
+  }
 }
 
 
 void sampleSensors() {
 
-    // Sample pressure and temperature sensors
-    bmpSensor.performReading();
-    temperature = bmpSensor.temperature;
-    altitude = bmpSensor.readAltitude(initalPressure);
+  // Sample pressure and temperature sensors
+  bmpSensor.performReading();
+  temperature = bmpSensor.temperature;
+  altitude = bmpSensor.readAltitude(initalPressure);
 
 
-    // Sample rotation and acceleration sensors
-    sensors_event_t orientationData, accelerometerData;
-    bnoSensor.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
-    bnoSensor.getEvent(&accelerometerData, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+  // Sample rotation and acceleration sensors
+  sensors_event_t orientationData, accelerometerData;
+  bnoSensor.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
+  bnoSensor.getEvent(&accelerometerData, Adafruit_BNO055::VECTOR_ACCELEROMETER);
 
-    orientationX = orientationData->orientation.x
-    orientationY = orientationData->orientation.y
-    orientationZ = orientationData->orientation.z
+  orientationX = orientationData->orientation.x;
+  orientationY = orientationData->orientation.y;
+  orientationZ = orientationData->orientation.z;
 
-    accelerationX = accelerometerData->acceleration.x
-    accelerationY = accelerometerData->acceleration.y
-    accelerationZ = accelerometerData->acceleration.z
+  accelerationX = accelerometerData->acceleration.x;
+  accelerationY = accelerometerData->acceleration.y;
+  accelerationZ = accelerometerData->acceleration.z;
 
 
 
-    // TODO: other sensors, GPS; 
-
+  // TODO: other sensors, GPS;
 }
