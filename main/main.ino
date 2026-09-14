@@ -1,3 +1,11 @@
+// Written by Jonas Nichols for Helios: Cansat 2 Month Project 2026
+// TODO:
+//      add async system for solar panel timer
+//      add ESPNOW Transmission
+//      add ESPNOW Reception
+//      add servo code
+//      add sd card system
+
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
@@ -5,6 +13,7 @@
 #include <String.h>
 #include <utility/imumaths.h>
 #include <Adafruit_BNO055.h>
+#include <SparkFun_u-blox_GNSS_v3.h>
 
 
 // Barometer and Temperature sensor
@@ -16,6 +25,9 @@ Adafruit_BMP3XX bmpSensor; // I2C var for Barometer
 
 // Accelometer and Rotation sensor
 Adafruit_BNO055 bnoSensor = Adafruit_BNO055(55, 0x28, &Wire)
+
+// GPS
+SFE_UBLOX_GNSS GNSS;
 
 
 // Sensor pins
@@ -39,7 +51,12 @@ float accelerationX;
 float accelerationY;
 float accelerationZ;
 
-void sampleSensors();       // add gps; add acceleometer
+long lastGPSsample;
+long latitude;
+long longitude;
+
+
+void sampleSensors();
 void saveData();            // TODO: add serial sd card connection
 void transmitTelemetry();   // TODO: add ESPNOW protocol things
 
@@ -54,6 +71,8 @@ String stage = 'launchPad';
 
 int setup() {
   // TODO: create receiver function
+
+    Wire.begin();
 
 
     // Set up bmp Sensor (Barometer and temperature)
@@ -72,13 +91,14 @@ int setup() {
     sampleSensors();
     initalPressure = (bmpSensor.pressure / 100);
 
-  // Set pressure of current (lowest) altitude in Hpa
-  sampleSensors();
-  initalPressure = (bmpSensor.pressure / 100);
-
     // Set up bno Sensor (orintation and accelometer)
-    bnoSensor.begin()
+    bnoSensor.begin();
 
+    // Start GPS
+    GNSS.begin();
+
+    GNSS.setI2COutput(COM_TYPE_UBX); // Sets output to UBX only instead of the standard NMEA
+    GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
 
 }
 
@@ -95,6 +115,7 @@ int loop() {
     if (altitude >= 10) {
       stage = 'ascent';
     }
+
   }
 
   while (stage == 'ascent') {
@@ -103,34 +124,45 @@ int loop() {
     saveData();
     transmitTelemetry();
 
+    // when at desired height
     if (altitude >= 530) {
       stage = 'apogee';
     }
+
   }
 
   while (stage == 'apogee') {
+
     release();
     startExtensionTimer();
 
     stage = 'decent';
+
   }
 
   while (stage == 'decent') {
+
     // receive commands
     sampleSensors();
     saveData();
     transmitTelemetry();
 
+    // when stops falling
     if (altitude <= 10 || velocity < 1.8) {
-      stage = 'ascent';
+
+      stage = 'landed';
+
     }
+
   }
 
   while (stage == 'landed') {
+
     // receive commands
     sampleSensors();
     saveData();
     transmitTelemetry();
+
   }
 }
 
@@ -156,7 +188,14 @@ void sampleSensors() {
   accelerationY = accelerometerData->acceleration.y;
   accelerationZ = accelerometerData->acceleration.z;
 
+  // Only sample GPS again if it has been 1 second
+  if (millis() - lastGPSsample > 1000) {
 
-
-  // TODO: other sensors, GPS;
+    // sample GPS
+    longitude = GNSS.getLongitude();
+    latitude = GNSS.getLatitude();
+    
+    lastGPSsample = millis();
+  
+  }
 }
