@@ -1,9 +1,14 @@
 // Written by Jonas Nichols for Helios: Cansat 2 Month Project 2026
 // TODO:
-//      add async system for solar panel timer
 //      add ESPNOW Transmission
 //      add ESPNOW Reception
 //      add sd card system
+//      find stack usage of async function with printf included inside and adjust the allocated bytes
+//
+// EXTRAS???
+//       add music
+//
+// groud station soon
 
 #include <Wire.h>
 #include <SPI.h>
@@ -28,9 +33,6 @@ Adafruit_BNO055 bnoSensor = Adafruit_BNO055(55, 0x28, &Wire)
 
 // GPS
 SFE_UBLOX_GNSS GNSS;
-
-// Solar panel task handle
-TaskHandle_T panelTaskHandle = NULL;
 
 
 // Sensor pins
@@ -72,7 +74,6 @@ void saveData();            // TODO: add serial sd card connection
 void transmitTelemetry();   // TODO: add ESPNOW protocol things
 
 void release();             // TODO: Probably connect a servo
-void startExtensionTimer(); // TODO: figure out async timer stuff
 
 void onReceive();           // TODO: when command is received, appropiate action is taken; async trigger function; ESPNOW
 
@@ -81,6 +82,16 @@ String stage = 'launchPad';
 
 
 int setup() {
+
+  xTaskCreatePinnedToCore(
+    startExtensionTimer,    // function
+    "startExtensionTimer",  // name
+    2500,                   // Stack size
+    NULL,                   // parameters
+    1                       // task priority
+    NULL,                   // Task handle !!!may be necessasry
+    1                       // Core to use
+  )
 
     Wire.begin();
 
@@ -225,7 +236,9 @@ void release() {
   releaseServo.write(releaseExtensionAmount);
 }
 
-void startExtensionTimer() {
-  vTaskDelay(5000);
+
+void startExtensionTimer(void *parameter) { // parameter required for FreeRTOS task
+  vTaskDelay(5000 / portTICK_PERIOD_MS); // 5000ms / period in ms
   panelServo.write(panelExtensionAmount);
+  Serial.printf("Bytes free in extension timer function: ", uxTaskGetStackHighWaterMark(NULL));
 }
