@@ -3,7 +3,6 @@
 //      add async system for solar panel timer
 //      add ESPNOW Transmission
 //      add ESPNOW Reception
-//      add servo code
 //      add sd card system
 
 #include <Wire.h>
@@ -14,6 +13,7 @@
 #include <utility/imumaths.h>
 #include <Adafruit_BNO055.h>
 #include <SparkFun_u-blox_GNSS_v3.h>
+#include <Servo.h>
 
 
 // Barometer and Temperature sensor
@@ -29,6 +29,9 @@ Adafruit_BNO055 bnoSensor = Adafruit_BNO055(55, 0x28, &Wire)
 // GPS
 SFE_UBLOX_GNSS GNSS;
 
+// Solar panel task handle
+TaskHandle_T panelTaskHandle = NULL;
+
 
 // Sensor pins
 const int SCL = 5;
@@ -36,7 +39,14 @@ const int SDA = 4;
 
 // Other pins
 const int operationLight = 27;
-const int buzzer = 26
+const int buzzer = 26;
+const int releasePin = 25;
+const int panelPin = 24;
+
+Servo releaseServo;
+const releaseExtensionAmount = 45;
+Servo panelServo;
+const panelExtensionAmount = 45;
 
 float altitude = 0;
 int velocity;
@@ -104,6 +114,10 @@ int setup() {
     digitalWrite(buzzer, HIGH);
     delay(1000);
     digitalWrite(buzzer, LOW);
+
+    // set up servos
+    releaseServo.attach(releasePin);
+    panelServo.attach(panelPin);
 
 }
 
@@ -204,4 +218,14 @@ void sampleSensors() {
   
   }
 
+}
+
+
+void release() {
+  releaseServo.write(releaseExtensionAmount);
+}
+
+void startExtensionTimer() {
+  vTaskDelay(5000);
+  panelServo.write(panelExtensionAmount);
 }
