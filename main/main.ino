@@ -1,14 +1,16 @@
-// Written by Jonas Nichols for Helios: Cansat 2 Month Project 2026
+// Written by Jonas Nichols for Helios: Team 1 Cansat 2 Month Project 2026
 // TODO:
-//      add ESPNOW Transmission
 //      add ESPNOW Reception
+//      add amount of sattilites
 //      add sd card system
+//      add battery voltage reader
 //      find stack usage of async function with printf included inside and adjust the allocated bytes
 //
 // EXTRAS???
-//       add music
+//      add music
+//      alert function
 //
-// groud station soon
+// ground station soon
 
 #include <Wire.h>
 #include <SPI.h>
@@ -19,6 +21,9 @@
 #include <Adafruit_BNO055.h>
 #include <SparkFun_u-blox_GNSS_v3.h>
 #include <Servo.h>
+#include <WiFi.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
 
 
 // Barometer and Temperature sensor
@@ -45,16 +50,23 @@ const int buzzer = 26;
 const int releasePin = 25;
 const int panelPin = 24;
 
+// servo information
 Servo releaseServo;
-const releaseExtensionAmount = 45;
+const releaseExtensionAmount = 90;
 Servo panelServo;
 const panelExtensionAmount = 45;
 
+int teamId = 1;
 float altitude = 0;
 int velocity;
 int packetCount = 0;
 int temperature;
 float initalPressure;
+float batteryVoltage;
+float panelVolt1;
+float panelVolt2;
+int morseUnit = 500;
+??? mechState = ???;
 
 float orientationX;
 float orientationY;
@@ -67,16 +79,32 @@ float accelerationZ;
 long lastGPSsample;
 long latitude;
 long longitude;
+int satsUsed;
+
+
+// ESP-NOW
+// teamId, timeElapsed, packetCount, stage, mechState, altitude, temperature, batteryVoltage, latitude, longitude, satsUsed,gyrox,y,z,accelerationX,accelerationY,accelerationZ,panelVolt1,panelVolt2,,extraData
+String data;
+String command;
+esp_now_peer_info_t groundInfo;
+// Ground MAC
+uint8_t MAC[] = {
+  0x##, 0x##, 0x##, 0x##, 0x##, 0x##
+};
+
 
 
 void sampleSensors();
 void saveData();            // TODO: add serial sd card connection
 void transmitTelemetry();   // TODO: add ESPNOW protocol things
 
-void release();             // TODO: Probably connect a servo
+void release();
 
-void onReceive();           // TODO: when command is received, appropiate action is taken; async trigger function; ESPNOW
+void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len);           // TODO: when command is received, appropiate action is taken; async trigger function; ESPNOW
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
+void alert(int num);
+void beep(int time);
 
 String stage = 'launchPad';
 
@@ -93,42 +121,60 @@ int setup() {
     1                       // Core to use
   )
 
-    Wire.begin();
+  // Set up ESP-NOW / Wifi
+  Serial.begin(115200);
+  // start Wifi
+  WiFi.mode(WIFI_STA);
+  while(!WiFi.STA.started()){ delay(100); }
+  // init ESP NOW
+  if (esp_now_init() != ESP_OK) { alert(); }
+  
+  esp_now_register_send_cb(OnDataSent);
 
-    // Set up bmp Sensor (Barometer and temperature)
-    bmpSensor.begin_I2C();
+  // register and add ground
+  memcpy(peerInfo.peer_addr, MAC, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) { alert(); }
+  
 
-    // Set up oversampling and filter initialization
-    bmpSensor.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
-    bmpSensor.setPressureOversampling(BMP3_OVERSAMPLING_4X);
-    bmpSensor.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
-    bmpSensor.setOutputDataRate(BMP3_ODR_50_HZ);
 
-    // First reading is inaccurate; throw away values
-    sampleSensors();
+  Wire.begin();
 
-    // Set pressure of current (lowest) altitude in Hpa
-    sampleSensors();
-    initalPressure = (bmpSensor.pressure / 100);
+  // Set up bmp Sensor (Barometer and temperature)
+  if (!bmpSensor.begin_I2C()) { alert(); }
 
-    // Set up bno Sensor (orintation and accelometer)
-    bnoSensor.begin();
+  // Set up oversampling and filter initialization
+  bmpSensor.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
+  bmpSensor.setPressureOversampling(BMP3_OVERSAMPLING_4X);
+  bmpSensor.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
+  bmpSensor.setOutputDataRate(BMP3_ODR_50_HZ);
 
-    // Start GPS
-    GNSS.begin();
+  // First reading is inaccurate; throw away values
+  sampleSensors();
 
-    GNSS.setI2COutput(COM_TYPE_UBX); // Sets output to UBX only instead of the standard NMEA
-    GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
+  // Set pressure of current (lowest) altitude in Hpa
+  sampleSensors();
+  initalPressure = (bmpSensor.pressure / 100);
 
-    // Start buzzer
-    pinMode(buzzer, OUTPUT);
-    digitalWrite(buzzer, HIGH);
-    delay(1000);
-    digitalWrite(buzzer, LOW);
+  // Set up bno Sensor (orintation and accelometer)
+  if (!bnoSensor.begin()) { alert(); }
 
-    // set up servos
-    releaseServo.attach(releasePin);
-    panelServo.attach(panelPin);
+  // Start GPS
+  if (!GNSS.begin()) { alert(); }
+
+  GNSS.setI2COutput(COM_TYPE_UBX); // Sets output to UBX only instead of the standard NMEA
+  GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
+
+  // Start buzzer
+  pinMode(buzzer, OUTPUT);
+  digitalWrite(buzzer, HIGH);
+  delay(1000);
+  digitalWrite(buzzer, LOW);
+
+  // set up servos
+  releaseServo.attach(releasePin);
+  panelServo.attach(panelPin);
 
 }
 
@@ -241,4 +287,89 @@ void startExtensionTimer(void *parameter) { // parameter required for FreeRTOS t
   vTaskDelay(5000 / portTICK_PERIOD_MS); // 5000ms / period in ms
   panelServo.write(panelExtensionAmount);
   Serial.printf("Bytes free in extension timer function: ", uxTaskGetStackHighWaterMark(NULL));
+}
+
+
+void onDataRecv(
+  const esp_now_recv_info_t *info,
+  const uint8_t *incomingData,
+  int len
+) {
+  command = String((char*)incomingData);
+
+  switch (command) {
+    case ...:
+    case ...:
+  }
+}
+
+
+void transmitTelemetry() {
+  data = 1 + ',' + 
+    millis() + ',' + 
+    packetCount + ',' + 
+    stage + ',' + 
+    mechState + ',' + 
+    altitude + ',' + 
+    temperature + ',' + 
+    batteryVoltage + ',' + 
+    latitude + ',' + 
+    longitude + ',' + 
+    satsUsed + ',' + 
+    gyrox + ',' +           // CHANGE GYROXYZ
+    y + ',' + 
+    z + ',' + 
+    accelerationX + ',' + 
+    accelerationY + ',' + 
+    accelerationZ + ',' + 
+    panelVolt1 + ',' + 
+    panelVolt2;
+  
+  if (esp_now_send(MAC, (uint8_t *) &data, sizeof(data)) == ESP_OK) {
+    // if sent correctly
+    packetCount++;
+  }
+  
+  
+  
+  // teamId, timeElapsed, packetCount, stage, mechState, altitude, temperature, batteryVoltage,
+  // latitude, longitude, satsUsed,gyrox,y,z,accelerationX,accelerationY,accelerationZ,panelVolt1,panelVolt2,,extraData
+}
+
+void alert(int num) {
+  if (num > 5) {
+
+    for (int i = 0; i < 5; i++) {
+      
+      if (num > 0) {
+        beep(morseUnit);
+        num--;
+      }
+      else {
+        beep(morseUnit*3);
+      }
+      delay(morseUnit);
+      
+    }
+  }
+  else {
+    for (int i = 0; i < 5; i++) {
+      
+      if (num > 0) {
+        beep(morseUnit*3);
+        num--;
+      }
+      else {
+        beep(morseUnit);
+      }
+      delay(morseUnit);
+      
+    }
+  }
+}
+
+void beep(int length) {
+  digitalWrite(buzzer, HIGH);
+  delay(length);
+  digitalWrite(buzzer, LOW);
 }
