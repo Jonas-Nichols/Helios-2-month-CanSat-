@@ -1,13 +1,12 @@
 // Written by Jonas Nichols for Helios: Team 1 Cansat 2 Month Project 2026
 // TODO:
 //      add ESPNOW Reception
-//      add amount of sattilites
 //      add sd card system
 //      add battery voltage reader
 //      find stack usage of async function with printf included inside and adjust the allocated bytes
 //
 // EXTRAS???
-//      add music
+//      add lebron sunshine
 //      alert function
 //
 // ground station soon
@@ -270,6 +269,7 @@ void sampleSensors() {
     // sample GPS
     longitude = GNSS.getLongitude();
     latitude = GNSS.getLatitude();
+    satsUsed = GNSS.getSIV();
     
     lastGPSsample = millis();
   
