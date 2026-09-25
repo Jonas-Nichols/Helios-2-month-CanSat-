@@ -2,8 +2,7 @@
 // NOTE: Cannot be uploaded while OpenLog is connected
 // TODO:
 //      add ESPNOW Reception
-//      mechstate, gyro
-//      add sd card system
+//      mechstate
 //      add battery voltage reader
 //      find stack usage of async function with printf included inside and adjust the allocated bytes
 //
@@ -11,7 +10,6 @@
 //      add lebron sunshine
 //      alert function
 //
-// ground station soon
 
 #include <Wire.h>
 #include <SPI.h>
@@ -69,9 +67,9 @@ float panelVolt2;
 int morseUnit = 500;
 ??? mechState = ???;
 
-float orientationX;
-float orientationY;
-float orientationZ;
+float gyroX;
+float gyroY;
+float gyroZ;
 
 float accelerationX;
 float accelerationY;
@@ -254,13 +252,13 @@ void sampleSensors() {
 
 
   // Sample rotation and acceleration sensors
-  sensors_event_t orientationData, accelerometerData;
-  bnoSensor.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
+  sensors_event_t gyroData, accelerometerData;
+  bnoSensor.getEvent(&gyroData, Adafruit_BNO055::VECTOR_GYROSCOPE);
   bnoSensor.getEvent(&accelerometerData, Adafruit_BNO055::VECTOR_ACCELEROMETER);
 
-  orientationX = orientationData->orientation.x;
-  orientationY = orientationData->orientation.y;
-  orientationZ = orientationData->orientation.z;
+  gyroX = gyroData->gyro.x;
+  gyroY = gyroData->gyro.y;
+  gyroZ = gyroData->gyro.z;
 
   accelerationX = accelerometerData->acceleration.x;
   accelerationY = accelerometerData->acceleration.y;
@@ -319,9 +317,9 @@ void saveTransmitData() {
     latitude + ',' + 
     longitude + ',' + 
     satsUsed + ',' + 
-    gyrox + ',' +           // CHANGE GYROXYZ
-    y + ',' + 
-    z + ',' + 
+    gyroX + ',' +           // CHANGE GYROXYZ
+    gyroY + ',' + 
+    gyroZ + ',' + 
     accelerationX + ',' + 
     accelerationY + ',' + 
     accelerationZ + ',' + 
