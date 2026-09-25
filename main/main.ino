@@ -1,6 +1,8 @@
 // Written by Jonas Nichols for Helios: Team 1 Cansat 2 Month Project 2026
+// NOTE: Cannot be uploaded while OpenLog is connected
 // TODO:
 //      add ESPNOW Reception
+//      mechstate, gyro
 //      add sd card system
 //      add battery voltage reader
 //      find stack usage of async function with printf included inside and adjust the allocated bytes
@@ -95,8 +97,8 @@ uint8_t MAC[] = {
 
 void sampleSensors();
 void saveData();            // TODO: add serial sd card connection
-void transmitTelemetry();   // TODO: add ESPNOW protocol things
-
+void saveTransmitData();
+void startExtensionTimer(void *parameter);
 void release();
 
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len);           // TODO: when command is received, appropiate action is taken; async trigger function; ESPNOW
@@ -135,8 +137,9 @@ int setup() {
   peerInfo.channel = 0;
   peerInfo.encrypt = false;
   if (esp_now_add_peer(&peerInfo) != ESP_OK) { alert(); }
-  
 
+  // start Serial2 for the OpenLog
+  Serial2.begin(115200);
 
   Wire.begin();
 
@@ -185,7 +188,7 @@ int loop() {
 
     sampleSensors();
     saveData();
-    transmitTelemetry();
+    saveTransmitData();
 
     if (altitude >= 10) {
       stage = 'ascent';
@@ -197,7 +200,7 @@ int loop() {
 
     sampleSensors();
     saveData();
-    transmitTelemetry();
+    saveTransmitData();
 
     // when at desired height
     if (altitude >= 530) {
@@ -220,7 +223,7 @@ int loop() {
     // receive commands
     sampleSensors();
     saveData();
-    transmitTelemetry();
+    saveTransmitData();
 
     // when stops falling
     if (altitude <= 10 || velocity < 1.8) {
@@ -236,7 +239,7 @@ int loop() {
     // receive commands
     sampleSensors();
     saveData();
-    transmitTelemetry();
+    saveTransmitData();
 
   }
 }
@@ -304,7 +307,7 @@ void onDataRecv(
 }
 
 
-void transmitTelemetry() {
+void saveTransmitData() {
   data = 1 + ',' + 
     millis() + ',' + 
     packetCount + ',' + 
@@ -324,6 +327,8 @@ void transmitTelemetry() {
     accelerationZ + ',' + 
     panelVolt1 + ',' + 
     panelVolt2;
+
+  Serial2.println(data);
   
   if (esp_now_send(MAC, (uint8_t *) &data, sizeof(data)) == ESP_OK) {
     // if sent correctly
