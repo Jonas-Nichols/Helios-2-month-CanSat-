@@ -1,8 +1,6 @@
 // Written by Jonas Nichols for Helios: Team 1 Cansat 2 Month Project 2026
 // NOTE: Cannot be uploaded while OpenLog is connected
 // TODO:
-//      add ESPNOW Reception
-//      mechstate
 //      add battery voltage reader
 //      find stack usage of async function with printf included inside and adjust the allocated bytes
 //
@@ -65,7 +63,7 @@ float batteryVoltage;
 float panelVolt1;
 float panelVolt2;
 int morseUnit = 500;
-??? mechState = ???;
+byte mechState = 0x00;
 
 float gyroX;
 float gyroY;
@@ -287,6 +285,7 @@ void release() {
 void startExtensionTimer(void *parameter) { // parameter required for FreeRTOS task
   vTaskDelay(5000 / portTICK_PERIOD_MS); // 5000ms / period in ms
   panelServo.write(panelExtensionAmount);
+  mechState = 0x11;
   Serial.printf("Bytes free in extension timer function: ", uxTaskGetStackHighWaterMark(NULL));
 }
 
@@ -317,7 +316,7 @@ void saveTransmitData() {
     latitude + ',' + 
     longitude + ',' + 
     satsUsed + ',' + 
-    gyroX + ',' +           // CHANGE GYROXYZ
+    gyroX + ',' +
     gyroY + ',' + 
     gyroZ + ',' + 
     accelerationX + ',' + 
