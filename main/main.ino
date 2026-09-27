@@ -1,6 +1,7 @@
 // Written by Jonas Nichols for Helios: Team 1 Cansat 2 Month Project 2026
 // NOTE: Cannot be uploaded while OpenLog is connected
 // TODO:
+//      receuive function
 //      add battery voltage reader
 //      find stack usage of async function with printf included inside and adjust the allocated bytes
 //
@@ -36,7 +37,6 @@ Adafruit_BNO055 bnoSensor = Adafruit_BNO055(55, 0x28, &Wire)
 // GPS
 SFE_UBLOX_GNSS GNSS;
 
-
 // Sensor pins
 const int SCL = 5;
 const int SDA = 4;
@@ -45,13 +45,16 @@ const int SDA = 4;
 const int operationLight = 27;
 const int buzzer = 26;
 const int releasePin = 25;
-const int panelPin = 24;
+const int panelServoPin = 24;
+const int panelOutputPin = 23; 
 
 // servo information
 Servo releaseServo;
-const releaseExtensionAmount = 90;
+const releaseExtensionAmount = -55;
+bool released = 0;
 Servo panelServo;
-const panelExtensionAmount = 45;
+const panelExtensionAmount = -90;
+bool panelExtended = 0;
 
 int teamId = 1;
 float altitude = 0;
@@ -62,7 +65,7 @@ float initalPressure;
 float batteryVoltage;
 float panelVolt1;
 float panelVolt2;
-int morseUnit = 500;
+int morseUnit = 500;    // in ms
 byte mechState = 0x00;
 
 float gyroX;
@@ -92,15 +95,15 @@ uint8_t MAC[] = {
 
 
 void sampleSensors();
-void saveData();            // TODO: add serial sd card connection
 void saveTransmitData();
 void startExtensionTimer(void *parameter);
+void panelExtend();
 void release();
 
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len);           // TODO: when command is received, appropiate action is taken; async trigger function; ESPNOW
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
-void alert(int num);
+void alert(int num = 99);
 void beep(int time);
 
 String stage = 'launchPad';
@@ -121,7 +124,7 @@ int setup() {
   // Set up ESP-NOW / Wifi
   Serial.begin(115200);
   // start Wifi
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(WIFI_STA);  
   while(!WiFi.STA.started()){ delay(100); }
   // init ESP NOW
   if (esp_now_init() != ESP_OK) { alert(); }
@@ -172,7 +175,7 @@ int setup() {
 
   // set up servos
   releaseServo.attach(releasePin);
-  panelServo.attach(panelPin);
+  panelServo.attach(panelServoPin);
 
 }
 
@@ -183,7 +186,7 @@ int loop() {
   while (stage == 'launchPad') {
 
     sampleSensors();
-    saveData();
+    
     saveTransmitData();
 
     if (altitude >= 10) {
@@ -195,7 +198,7 @@ int loop() {
   while (stage == 'ascent') {
 
     sampleSensors();
-    saveData();
+    
     saveTransmitData();
 
     // when at desired height
@@ -218,7 +221,7 @@ int loop() {
 
     // receive commands
     sampleSensors();
-    saveData();
+    
     saveTransmitData();
 
     // when stops falling
@@ -234,7 +237,7 @@ int loop() {
 
     // receive commands
     sampleSensors();
-    saveData();
+    
     saveTransmitData();
 
   }
@@ -278,14 +281,25 @@ void sampleSensors() {
 
 
 void release() {
+  if (released) { return; }
+
   releaseServo.write(releaseExtensionAmount);
 }
 
 
-void startExtensionTimer(void *parameter) { // parameter required for FreeRTOS task
-  vTaskDelay(5000 / portTICK_PERIOD_MS); // 5000ms / period in ms
+void panelExtend() {
+  if (panelExtended) { return; }
+
   panelServo.write(panelExtensionAmount);
   mechState = 0x11;
+}
+
+
+void startExtensionTimer(void *parameter) { // parameter required for FreeRTOS task
+
+  vTaskDelay(5000 / portTICK_PERIOD_MS); // 5000ms / period in ms
+
+  panelExtend()
   Serial.printf("Bytes free in extension timer function: ", uxTaskGetStackHighWaterMark(NULL));
 }
 
@@ -297,9 +311,16 @@ void onDataRecv(
 ) {
   command = String((char*)incomingData);
 
-  switch (command) {
-    case ...:
-    case ...:
+  switch (command[0]) {
+    case "r":
+      release();
+      break;
+    case "e":
+      panelExtend();
+      break;
+    case "a":
+      alert();
+      break;
   }
 }
 
@@ -317,8 +338,8 @@ void saveTransmitData() {
     longitude + ',' + 
     satsUsed + ',' + 
     gyroX + ',' +
-    gyroY + ',' + 
-    gyroZ + ',' + 
+    gyroY + ',' +
+    gyroZ + ',' +
     accelerationX + ',' + 
     accelerationY + ',' + 
     accelerationZ + ',' + 
@@ -338,8 +359,12 @@ void saveTransmitData() {
   // latitude, longitude, satsUsed,gyrox,y,z,accelerationX,accelerationY,accelerationZ,panelVolt1,panelVolt2,,extraData
 }
 
+// plays an error code based on input
 void alert(int num) {
-  if (num > 5) {
+  if (num == 99) { // buzzer on
+    digitalWrite(buzzer, HIGH);
+  }
+  else if (num > 5) {
 
     for (int i = 0; i < 5; i++) {
       
