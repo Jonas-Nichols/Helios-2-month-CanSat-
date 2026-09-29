@@ -1,8 +1,6 @@
 // Written by Jonas Nichols for Helios: Team 1 Cansat 2 Month Project 2026
 // NOTE: Cannot be uploaded while OpenLog is connected
 // TODO:
-//      receuive function
-//      add battery voltage reader
 //      find stack usage of async function with printf included inside and adjust the allocated bytes
 //
 // EXTRAS???
@@ -46,7 +44,9 @@ const int operationLight = 27;
 const int buzzer = 26;
 const int releasePin = 25;
 const int panelServoPin = 24;
-const int panelOutputPin = 23; 
+const int panelAInputPin = 36;
+const int panelBInputPin = 39; 
+
 
 // servo information
 Servo releaseServo;
@@ -63,8 +63,8 @@ int packetCount = 0;
 int temperature;
 float initalPressure;
 float batteryVoltage;
-float panelVolt1;
-float panelVolt2;
+float panelAVolt;
+float panelBVolt;
 int morseUnit = 500;    // in ms
 byte mechState = 0x00;
 
@@ -106,6 +106,8 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void alert(int num = 99);
 void beep(int time);
 
+int xTomV(int bits);
+
 String stage = 'launchPad';
 
 
@@ -116,8 +118,8 @@ int setup() {
     "startExtensionTimer",  // name
     2500,                   // Stack size
     NULL,                   // parameters
-    1                       // task priority
-    NULL,                   // Task handle !!!may be necessasry
+    1,                       // task priority
+    1,                   // Task handle !!!may be necessasry
     1                       // Core to use
   )
 
@@ -176,6 +178,9 @@ int setup() {
   // set up servos
   releaseServo.attach(releasePin);
   panelServo.attach(panelServoPin);
+
+  // set up panel voltage readers
+  analogSetAttenuation(ADC_0db);
 
 }
 
@@ -245,6 +250,10 @@ int loop() {
 
 
 void sampleSensors() {
+
+  // Sample solar cell voltages
+  panelAVolt = xTomV(analogRead(panelAInputPin));
+  panelBVolt = xTomV(analogRead(panelBInputPin));
 
   // Sample pressure and temperature sensors
   bmpSensor.performReading();
@@ -343,8 +352,8 @@ void saveTransmitData() {
     accelerationX + ',' + 
     accelerationY + ',' + 
     accelerationZ + ',' + 
-    panelVolt1 + ',' + 
-    panelVolt2;
+    panelAVolt + ',' + 
+    panelBVolt;
 
   Serial2.println(data);
   
@@ -395,8 +404,14 @@ void alert(int num) {
   }
 }
 
+// beeps for length
 void beep(int length) {
   digitalWrite(buzzer, HIGH);
   delay(length);
   digitalWrite(buzzer, LOW);
+}
+
+// converts the analog input to mV
+int xTomV(int bits) {
+  return (((bits / 4095) * 850) + 100);
 }
