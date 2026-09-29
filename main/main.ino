@@ -55,10 +55,10 @@ const int panelBInputPin = 39;
 
 // servo information
 Servo releaseServo;
-const int releaseExtensionAmount = -55;
+const int releaseExtensionAmount = 55;		// [-90,90]
 bool released = 0;
 Servo panelServo;
-const int panelExtensionAmount = -90;
+const int panelExtensionAmount = 90;			// [-90,90]
 bool panelExtended = 0;
 
 int teamId = 1;
@@ -174,6 +174,9 @@ int setup() {
   // set up servos
   releaseServo.attach(releasePin);
   panelServo.attach(panelServoPin);
+
+	releaseServo.write(90);
+	panelServo.write(90);
 
   // set up panel voltage readers
   analogSetAttenuation(ADC_0db);
@@ -292,14 +295,14 @@ void sampleSensors() {
 void release() {
   if (released) { return; }
 
-  releaseServo.write(releaseExtensionAmount);
+  releaseServo.write(90-releaseExtensionAmount);
 }
 
 
 void panelExtend() {
   if (panelExtended) { return; }
 
-  panelServo.write(panelExtensionAmount);
+  panelServo.write(90-panelExtensionAmount);
   mechState = 0x11;
   panelExtended = true;
 }
