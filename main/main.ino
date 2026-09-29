@@ -103,7 +103,6 @@ uint8_t MAC[] = {
 
 void sampleSensors();
 void saveTransmitData();
-void startExtensionTimer(void *parameter);
 void panelExtend();
 void release();
 
@@ -119,16 +118,6 @@ String stage = 'launchPad';
 
 
 int setup() {
-
-  xTaskCreatePinnedToCore(
-    startExtensionTimer,    // function
-    "startExtensionTimer",  // name
-    2500,                   // Stack size
-    NULL,                   // parameters
-    1,                       // task priority
-    1,                   // Task handle !!!may be necessasry
-    1                       // Core to use
-  )
 
   // Set up ESP-NOW / Wifi
   Serial.begin(115200);
@@ -223,7 +212,6 @@ int loop() {
   while (stage == 'apogee') {
 
     release();
-    startExtensionTimer();
 
     stage = 'decent';
 
@@ -308,15 +296,6 @@ void panelExtend() {
 
   panelServo.write(panelExtensionAmount);
   mechState = 0x11;
-}
-
-
-void startExtensionTimer(void *parameter) { // parameter required for FreeRTOS task
-
-  vTaskDelay(5000 / portTICK_PERIOD_MS); // 5000ms / period in ms
-
-  panelExtend()
-  Serial.printf("Bytes free in extension timer function: ", uxTaskGetStackHighWaterMark(NULL));
 }
 
 
