@@ -1,12 +1,19 @@
 // Written by Jonas Nichols for Helios: Team 1 Cansat 2 Month Project 2026
 // NOTE: Cannot be uploaded while OpenLog is connected
+//
 // TODO:
 //      find stack usage of async function with printf included inside and adjust the allocated bytes
 //
 // EXTRAS???
 //      add lebron sunshine
-//      alert function
 //
+// Error nums
+// 1: ESPNOW start fail
+// 2: ESPNOW peer add fail
+// 3: BMP (alt/temp) fail
+// 4: BNO (orien/velocity) fail
+// 5: GNSS (GPS) fail
+
 
 #include <Wire.h>
 #include <SPI.h>
@@ -129,7 +136,7 @@ int setup() {
   WiFi.mode(WIFI_STA);  
   while(!WiFi.STA.started()){ delay(100); }
   // init ESP NOW
-  if (esp_now_init() != ESP_OK) { alert(); }
+  if (esp_now_init() != ESP_OK) { alert(1); }
   
   esp_now_register_send_cb(OnDataSent);
 
@@ -137,7 +144,7 @@ int setup() {
   memcpy(peerInfo.peer_addr, MAC, 6);
   peerInfo.channel = 0;
   peerInfo.encrypt = false;
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) { alert(); }
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) { alert(2); }
 
   // start Serial2 for the OpenLog
   Serial2.begin(115200);
@@ -145,7 +152,7 @@ int setup() {
   Wire.begin();
 
   // Set up bmp Sensor (Barometer and temperature)
-  if (!bmpSensor.begin_I2C()) { alert(); }
+  if (!bmpSensor.begin_I2C()) { alert(3); }
 
   // Set up oversampling and filter initialization
   bmpSensor.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
@@ -161,10 +168,10 @@ int setup() {
   initalPressure = (bmpSensor.pressure / 100);
 
   // Set up bno Sensor (orintation and accelometer)
-  if (!bnoSensor.begin()) { alert(); }
+  if (!bnoSensor.begin()) { alert(4); }
 
   // Start GPS
-  if (!GNSS.begin()) { alert(); }
+  if (!GNSS.begin()) { alert(5); }
 
   GNSS.setI2COutput(COM_TYPE_UBX); // Sets output to UBX only instead of the standard NMEA
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
@@ -368,12 +375,12 @@ void saveTransmitData() {
   // latitude, longitude, satsUsed,gyrox,y,z,accelerationX,accelerationY,accelerationZ,panelVolt1,panelVolt2,,extraData
 }
 
-// plays an error code based on input
+// plays an error code based on input (default num = 99)
 void alert(int num) {
   if (num == 99) { // buzzer on
     digitalWrite(buzzer, HIGH);
   }
-  else if (num > 5) {
+  else if (num > 5 && num < 10) {
 
     for (int i = 0; i < 5; i++) {
       
