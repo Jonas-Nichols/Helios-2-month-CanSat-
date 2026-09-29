@@ -2,7 +2,9 @@
 // NOTE: Cannot be uploaded while OpenLog is connected
 //
 // TODO:
+//      add mac addresses
 //      find stack usage of async function with printf included inside and adjust the allocated bytes
+//      Find battery voltage
 //
 // EXTRAS???
 //      add lebron sunshine
@@ -20,10 +22,10 @@
 #include <Adafruit_Sensor.h>
 #include "Adafruit_BMP3XX.h"
 #include <String.h>
-#include <utility/imumaths.h>
 #include <Adafruit_BNO055.h>
+#include <utility/imumaths.h>
 #include <SparkFun_u-blox_GNSS_v3.h>
-#include <Servo.h>
+#include <ESP32Servo.h>
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -37,14 +39,10 @@
 Adafruit_BMP3XX bmpSensor; // I2C var for Barometer
 
 // Accelometer and Rotation sensor
-Adafruit_BNO055 bnoSensor = Adafruit_BNO055(55, 0x28, &Wire)
+Adafruit_BNO055 bnoSensor = Adafruit_BNO055(55, 0x28, &Wire);
 
 // GPS
 SFE_UBLOX_GNSS GNSS;
-
-// Sensor pins
-const int SCL = 5;
-const int SDA = 4;
 
 // Other pins
 const int operationLight = 27;
@@ -57,10 +55,10 @@ const int panelBInputPin = 39;
 
 // servo information
 Servo releaseServo;
-const releaseExtensionAmount = -55;
+const int releaseExtensionAmount = -55;
 bool released = 0;
 Servo panelServo;
-const panelExtensionAmount = -90;
+const int panelExtensionAmount = -90;
 bool panelExtended = 0;
 
 int teamId = 1;
@@ -96,9 +94,8 @@ String command;
 esp_now_peer_info_t groundInfo;
 // Ground MAC
 uint8_t MAC[] = {
-  0x##, 0x##, 0x##, 0x##, 0x##, 0x##
+  // 0x##, 0x##, 0x##, 0x##, 0x##, 0x##
 };
-
 
 
 void sampleSensors();
@@ -108,27 +105,17 @@ void panelExtend();
 void release();
 
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len);           // TODO: when command is received, appropiate action is taken; async trigger function; ESPNOW
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
+void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
 void alert(int num = 99);
 void beep(int time);
 
 int xTomV(int bits);
 
-String stage = 'launchPad';
+String stage = "launchPad";
 
 
-int setup() {
-
-  xTaskCreatePinnedToCore(
-    startExtensionTimer,    // function
-    "startExtensionTimer",  // name
-    2500,                   // Stack size
-    NULL,                   // parameters
-    1,                       // task priority
-    1,                   // Task handle !!!may be necessasry
-    1                       // Core to use
-  )
+void setup() {
 
   // Set up ESP-NOW / Wifi
   Serial.begin(115200);
@@ -138,13 +125,15 @@ int setup() {
   // init ESP NOW
   if (esp_now_init() != ESP_OK) { alert(1); }
   
-  esp_now_register_send_cb(OnDataSent);
+  esp_now_register_send_cb(esp_now_send_cb_t(onDataSent));
 
   // register and add ground
-  memcpy(peerInfo.peer_addr, MAC, 6);
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) { alert(2); }
+  memcpy(groundInfo.peer_addr, MAC, 6);
+  groundInfo.channel = 0;
+  groundInfo.encrypt = false;
+  if (esp_now_add_peer(&groundInfo) != ESP_OK) { alert(2); }
+  // register callback function
+  esp_now_register_recv_cb(esp_now_recv_cb_t(onDataRecv));
 
   // start Serial2 for the OpenLog
   Serial2.begin(115200);
@@ -189,25 +178,35 @@ int setup() {
   // set up panel voltage readers
   analogSetAttenuation(ADC_0db);
 
+  xTaskCreate(
+    startExtensionTimer,    // function
+    "startExtensionTimer",  // name
+    2500,                   // Stack size
+    NULL,                   // parameters
+    1,                       // task priority
+    NULL,                   // Task handle
+    1                       // Core to use
+  );
+
 }
 
 
-int loop() {
-  stage = 'launchPad';
+void loop() {
+  stage = "launchPad";
 
-  while (stage == 'launchPad') {
+  while (stage == "launchPad") {
 
     sampleSensors();
     
     saveTransmitData();
 
     if (altitude >= 10) {
-      stage = 'ascent';
+      stage = "ascent";
     }
 
   }
 
-  while (stage == 'ascent') {
+  while (stage == "ascent") {
 
     sampleSensors();
     
@@ -215,21 +214,21 @@ int loop() {
 
     // when at desired height
     if (altitude >= 530) {
-      stage = 'apogee';
+      stage = "apogee";
     }
 
   }
 
-  while (stage == 'apogee') {
+  while (stage == "apogee") {
 
     release();
     startExtensionTimer();
 
-    stage = 'decent';
+    stage = "decent";
 
   }
 
-  while (stage == 'decent') {
+  while (stage == "decent") {
 
     // receive commands
     sampleSensors();
@@ -240,12 +239,12 @@ int loop() {
     if (altitude <= 10 || velocity < 1.8) {
 
       digitalWrite(buzzer, HIGH);
-      stage = 'landed';
+      stage = "landed";
 
     }
   }
 
-  while (stage == 'landed') {
+  while (stage == "landed") {
 
     // receive commands
     sampleSensors();
@@ -273,13 +272,13 @@ void sampleSensors() {
   bnoSensor.getEvent(&gyroData, Adafruit_BNO055::VECTOR_GYROSCOPE);
   bnoSensor.getEvent(&accelerometerData, Adafruit_BNO055::VECTOR_ACCELEROMETER);
 
-  gyroX = gyroData->gyro.x;
-  gyroY = gyroData->gyro.y;
-  gyroZ = gyroData->gyro.z;
+  gyroX = gyroData.gyro.x;
+  gyroY = gyroData.gyro.y;
+  gyroZ = gyroData.gyro.z;
 
-  accelerationX = accelerometerData->acceleration.x;
-  accelerationY = accelerometerData->acceleration.y;
-  accelerationZ = accelerometerData->acceleration.z;
+  accelerationX = accelerometerData.acceleration.x;
+  accelerationY = accelerometerData.acceleration.y;
+  accelerationZ = accelerometerData.acceleration.z;
 
   // Only sample GPS again if it has been 1 second
   if (millis() - lastGPSsample > 1000) {
@@ -315,7 +314,7 @@ void startExtensionTimer(void *parameter) { // parameter required for FreeRTOS t
 
   vTaskDelay(5000 / portTICK_PERIOD_MS); // 5000ms / period in ms
 
-  panelExtend()
+  panelExtend();
   Serial.printf("Bytes free in extension timer function: ", uxTaskGetStackHighWaterMark(NULL));
 }
 
@@ -328,13 +327,13 @@ void onDataRecv(
   command = String((char*)incomingData);
 
   switch (command[0]) {
-    case "r":
+    case 'r':
       release();
       break;
-    case "e":
+    case 'e':
       panelExtend();
       break;
-    case "a":
+    case 'a':
       alert();
       break;
   }
