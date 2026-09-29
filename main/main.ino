@@ -115,7 +115,7 @@ int xTomV(int bits);
 String stage = "launchPad";
 
 
-void setup() {
+int setup() {
 
   // Set up ESP-NOW / Wifi
   Serial.begin(115200);
