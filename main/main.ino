@@ -50,7 +50,7 @@ const int buzzer = 26;
 const int releasePin = 25;
 const int panelServoPin = 24;
 const int panelAInputPin = 36;
-const int panelBInputPin = 39; 
+const int panelBInputPin = 39;
 
 
 // servo information
@@ -72,6 +72,7 @@ float panelAVolt;
 float panelBVolt;
 int morseUnit = 500;    // in ms
 byte mechState = 0x00;
+float PEtimeStarted = 0;
 
 float gyroX;
 float gyroY;
@@ -100,7 +101,6 @@ uint8_t MAC[] = {
 
 void sampleSensors();
 void saveTransmitData();
-void startExtensionTimer(void *parameter);
 void panelExtend();
 void release();
 
@@ -178,16 +178,6 @@ void setup() {
   // set up panel voltage readers
   analogSetAttenuation(ADC_0db);
 
-  xTaskCreate(
-    startExtensionTimer,    // function
-    "startExtensionTimer",  // name
-    2500,                   // Stack size
-    NULL,                   // parameters
-    1,                       // task priority
-    NULL,                   // Task handle
-    1                       // Core to use
-  );
-
 }
 
 
@@ -222,7 +212,7 @@ void loop() {
   while (stage == "apogee") {
 
     release();
-    startExtensionTimer();
+    PEtimeStarted = millis();
 
     stage = "decent";
 
@@ -241,6 +231,10 @@ void loop() {
       digitalWrite(buzzer, HIGH);
       stage = "landed";
 
+    }
+
+    if (!panelExtended && (millis()-PEtimeStarted) > 5000) {
+      panelExtend();
     }
   }
 
@@ -307,15 +301,7 @@ void panelExtend() {
 
   panelServo.write(panelExtensionAmount);
   mechState = 0x11;
-}
-
-
-void startExtensionTimer(void *parameter) { // parameter required for FreeRTOS task
-
-  vTaskDelay(5000 / portTICK_PERIOD_MS); // 5000ms / period in ms
-
-  panelExtend();
-  Serial.printf("Bytes free in extension timer function: ", uxTaskGetStackHighWaterMark(NULL));
+  panelExtended = true;
 }
 
 
