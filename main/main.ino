@@ -32,10 +32,6 @@
 
 
 // Barometer and Temperature sensor
-#define BMP_SCK 13
-#define BMP_MISO 12
-#define BMP_MOSI 11
-#define BMP_CS 10
 Adafruit_BMP3XX bmpSensor; // I2C var for Barometer
 
 // Accelometer and Rotation sensor
@@ -55,13 +51,13 @@ const int panelBInputPin = 39;
 
 // servo information
 Servo releaseServo;
-const int releaseExtensionAmount = 55;		// [-90,90]
+const int releaseExtensionAmount = 55;
 bool released = 0;
 Servo panelServo;
-const int panelExtensionAmount = 90;			// [-90,90]
+const int panelExtensionAmount = 90;
 bool panelExtended = 0;
 
-int teamId = 1;
+String teamId = "001";
 float altitude = 0;
 int velocity;
 int packetCount = 0;
@@ -95,7 +91,7 @@ String command;
 esp_now_peer_info_t groundInfo;
 // Ground MAC
 uint8_t MAC[] = {
-  // 0x##, 0x##, 0x##, 0x##, 0x##, 0x##
+  0x68, 0x09, 0x47, 0x9C, 0xA8, 0xDC
 };
 
 
@@ -112,7 +108,24 @@ void beep(int time);
 
 int xTomV(int bits);
 
-String stage = "launchPad";
+enum stage {
+  launchPad,
+  ascent,
+  apogee,
+  descent,
+  landed
+}
+String stageNames[5] = {
+  "launchPad",
+  "ascent",
+  "apogee",
+  "descent",
+  "landed"
+}
+
+flightState();
+
+stage curStage;
 
 
 int setup() {
@@ -181,74 +194,61 @@ int setup() {
   // set up panel voltage readers
   analogSetAttenuation(ADC_0db);
 
+  curStage = launchPad;
 }
 
 
 void loop() {
-  stage = "launchPad";
+  sampleSensors();
 
-  while (stage == "launchPad") {
+  saveTransmitData();
+  flightState();
+}
 
-    sampleSensors();
-    
-    saveTransmitData();
 
-    if (altitude >= 10) {
-      stage = "ascent";
-    }
+void flightState{
+  switch stage:
+    case launchPad:
 
-  }
+      if (altitude >= 10) {
+        stage = "ascent";
+      }
+      break;
 
-  while (stage == "ascent") {
+    case ascent:
 
-    sampleSensors();
-    
-    saveTransmitData();
+      // when at desired height
+      if (altitude >= 530) {
+        stage = "apogee";
+      }
+      break;
 
-    // when at desired height
-    if (altitude >= 530) {
-      stage = "apogee";
-    }
+    case apogee:
 
-  }
+      release();
+      PEtimeStarted = millis();
 
-  while (stage == "apogee") {
+      stage = descent;
+      break;
 
-    release();
-    PEtimeStarted = millis();
+    case descent:
 
-    stage = "decent";
+      // when stops falling
+      if (altitude <= 10 || velocity < 1.8) {
 
-  }
+        digitalWrite(buzzer, HIGH);
+        stage = "landed";
 
-  while (stage == "decent") {
+      }
 
-    // receive commands
-    sampleSensors();
-    
-    saveTransmitData();
+      if (!panelExtended && (millis()-PEtimeStarted) > 5000) {
+        panelExtend();
+      }
+      break;
 
-    // when stops falling
-    if (altitude <= 10 || velocity < 1.8) {
+    case landed:
+      break;
 
-      digitalWrite(buzzer, HIGH);
-      stage = "landed";
-
-    }
-
-    if (!panelExtended && (millis()-PEtimeStarted) > 5000) {
-      panelExtend();
-    }
-  }
-
-  while (stage == "landed") {
-
-    // receive commands
-    sampleSensors();
-    
-    saveTransmitData();
-
-  }
 }
 
 
@@ -295,7 +295,7 @@ void sampleSensors() {
 void release() {
   if (released) { return; }
 
-  releaseServo.write(90-releaseExtensionAmount);
+  releaseServo.write(90-  );
 }
 
 
@@ -330,7 +330,7 @@ void onDataRecv(
 
 
 void saveTransmitData() {
-  data = 1 + ',' + 
+  data = "001" + ',' + 
     millis() + ',' + 
     packetCount + ',' + 
     stage + ',' + 
