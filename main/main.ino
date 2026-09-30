@@ -2,7 +2,9 @@
 // NOTE: Cannot be uploaded while OpenLog is connected
 //
 // TODO:
+//      add mac addresses
 //      find stack usage of async function with printf included inside and adjust the allocated bytes
+//      Find battery voltage
 //
 // EXTRAS???
 //      add lebron sunshine
@@ -20,10 +22,10 @@
 #include <Adafruit_Sensor.h>
 #include "Adafruit_BMP3XX.h"
 #include <String.h>
-#include <utility/imumaths.h>
 #include <Adafruit_BNO055.h>
+#include <utility/imumaths.h>
 #include <SparkFun_u-blox_GNSS_v3.h>
-#include <Servo.h>
+#include <ESP32Servo.h>
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -37,14 +39,10 @@
 Adafruit_BMP3XX bmpSensor; // I2C var for Barometer
 
 // Accelometer and Rotation sensor
-Adafruit_BNO055 bnoSensor = Adafruit_BNO055(55, 0x28, &Wire)
+Adafruit_BNO055 bnoSensor = Adafruit_BNO055(55, 0x28, &Wire);
 
 // GPS
 SFE_UBLOX_GNSS GNSS;
-
-// Sensor pins
-const int SCL = 5;
-const int SDA = 4;
 
 // Other pins
 const int operationLight = 27;
@@ -52,15 +50,15 @@ const int buzzer = 26;
 const int releasePin = 25;
 const int panelServoPin = 24;
 const int panelAInputPin = 36;
-const int panelBInputPin = 39; 
+const int panelBInputPin = 39;
 
 
 // servo information
 Servo releaseServo;
-const releaseExtensionAmount = -55;
+const int releaseExtensionAmount = 55;		// [-90,90]
 bool released = 0;
 Servo panelServo;
-const panelExtensionAmount = -90;
+const int panelExtensionAmount = 90;			// [-90,90]
 bool panelExtended = 0;
 
 int teamId = 1;
@@ -74,6 +72,7 @@ float panelAVolt;
 float panelBVolt;
 int morseUnit = 500;    // in ms
 byte mechState = 0x00;
+float PEtimeStarted = 0;
 
 float gyroX;
 float gyroY;
@@ -96,9 +95,8 @@ String command;
 esp_now_peer_info_t groundInfo;
 // Ground MAC
 uint8_t MAC[] = {
-  0x##, 0x##, 0x##, 0x##, 0x##, 0x##
+  // 0x##, 0x##, 0x##, 0x##, 0x##, 0x##
 };
-
 
 
 void sampleSensors();
@@ -107,14 +105,14 @@ void panelExtend();
 void release();
 
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len);           // TODO: when command is received, appropiate action is taken; async trigger function; ESPNOW
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
+void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
 void alert(int num = 99);
 void beep(int time);
 
 int xTomV(int bits);
 
-String stage = 'launchPad';
+String stage = "launchPad";
 
 
 int setup() {
@@ -127,13 +125,15 @@ int setup() {
   // init ESP NOW
   if (esp_now_init() != ESP_OK) { alert(1); }
   
-  esp_now_register_send_cb(OnDataSent);
+  esp_now_register_send_cb(esp_now_send_cb_t(onDataSent));
 
   // register and add ground
-  memcpy(peerInfo.peer_addr, MAC, 6);
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) { alert(2); }
+  memcpy(groundInfo.peer_addr, MAC, 6);
+  groundInfo.channel = 0;
+  groundInfo.encrypt = false;
+  if (esp_now_add_peer(&groundInfo) != ESP_OK) { alert(2); }
+  // register callback function
+  esp_now_register_recv_cb(esp_now_recv_cb_t(onDataRecv));
 
   // start Serial2 for the OpenLog
   Serial2.begin(115200);
@@ -175,28 +175,31 @@ int setup() {
   releaseServo.attach(releasePin);
   panelServo.attach(panelServoPin);
 
+	releaseServo.write(90);
+	panelServo.write(90);
+
   // set up panel voltage readers
   analogSetAttenuation(ADC_0db);
 
 }
 
 
-int loop() {
-  stage = 'launchPad';
+void loop() {
+  stage = "launchPad";
 
-  while (stage == 'launchPad') {
+  while (stage == "launchPad") {
 
     sampleSensors();
     
     saveTransmitData();
 
     if (altitude >= 10) {
-      stage = 'ascent';
+      stage = "ascent";
     }
 
   }
 
-  while (stage == 'ascent') {
+  while (stage == "ascent") {
 
     sampleSensors();
     
@@ -204,20 +207,21 @@ int loop() {
 
     // when at desired height
     if (altitude >= 530) {
-      stage = 'apogee';
+      stage = "apogee";
     }
 
   }
 
-  while (stage == 'apogee') {
+  while (stage == "apogee") {
 
     release();
+    PEtimeStarted = millis();
 
-    stage = 'decent';
+    stage = "decent";
 
   }
 
-  while (stage == 'decent') {
+  while (stage == "decent") {
 
     // receive commands
     sampleSensors();
@@ -228,12 +232,16 @@ int loop() {
     if (altitude <= 10 || velocity < 1.8) {
 
       digitalWrite(buzzer, HIGH);
-      stage = 'landed';
+      stage = "landed";
 
+    }
+
+    if (!panelExtended && (millis()-PEtimeStarted) > 5000) {
+      panelExtend();
     }
   }
 
-  while (stage == 'landed') {
+  while (stage == "landed") {
 
     // receive commands
     sampleSensors();
@@ -261,13 +269,13 @@ void sampleSensors() {
   bnoSensor.getEvent(&gyroData, Adafruit_BNO055::VECTOR_GYROSCOPE);
   bnoSensor.getEvent(&accelerometerData, Adafruit_BNO055::VECTOR_ACCELEROMETER);
 
-  gyroX = gyroData->gyro.x;
-  gyroY = gyroData->gyro.y;
-  gyroZ = gyroData->gyro.z;
+  gyroX = gyroData.gyro.x;
+  gyroY = gyroData.gyro.y;
+  gyroZ = gyroData.gyro.z;
 
-  accelerationX = accelerometerData->acceleration.x;
-  accelerationY = accelerometerData->acceleration.y;
-  accelerationZ = accelerometerData->acceleration.z;
+  accelerationX = accelerometerData.acceleration.x;
+  accelerationY = accelerometerData.acceleration.y;
+  accelerationZ = accelerometerData.acceleration.z;
 
   // Only sample GPS again if it has been 1 second
   if (millis() - lastGPSsample > 1000) {
@@ -287,15 +295,16 @@ void sampleSensors() {
 void release() {
   if (released) { return; }
 
-  releaseServo.write(releaseExtensionAmount);
+  releaseServo.write(90-releaseExtensionAmount);
 }
 
 
 void panelExtend() {
   if (panelExtended) { return; }
 
-  panelServo.write(panelExtensionAmount);
+  panelServo.write(90-panelExtensionAmount);
   mechState = 0x11;
+  panelExtended = true;
 }
 
 
@@ -307,13 +316,13 @@ void onDataRecv(
   command = String((char*)incomingData);
 
   switch (command[0]) {
-    case "r":
+    case 'r':
       release();
       break;
-    case "e":
+    case 'e':
       panelExtend();
       break;
-    case "a":
+    case 'a':
       alert();
       break;
   }
