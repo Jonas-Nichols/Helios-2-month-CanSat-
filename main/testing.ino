@@ -230,9 +230,11 @@ void onDataRecv(
   }
 }
 
+void buzzerSetup() {
+  pinMode(buzzer, OUTPUT);
+}
 void buzzerUse() {
     // Start buzzer
-  pinMode(buzzer, OUTPUT);
   digitalWrite(buzzer, HIGH);
   delay(1000);
   digitalWrite(buzzer, LOW);
@@ -265,3 +267,11 @@ void openLogUse() {
 
   Serial2.println(data);
 };
+
+int setup() {
+  buzzerSetup();
+}
+
+void loop() {
+  buzzerUse();
+}
