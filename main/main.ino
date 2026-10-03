@@ -134,7 +134,6 @@ void setup() {
 
   // Set up ESP-NOW / Wifi
   Serial.begin(115200);
-  Serial.println("BEEEEEEEEEEEP");
   // start Wifi
   WiFi.mode(WIFI_STA);  
   while(!WiFi.STA.started()){ delay(100); }
