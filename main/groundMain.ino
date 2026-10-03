@@ -18,15 +18,15 @@ void setup() {
 
   // start Wifi
   WiFi.mode(WIFI_STA);  
-  while(!WiFi.STA.started()){ Serial.println("WIFI NOT STARTED") }
+  while(!WiFi.STA.started()){ Serial.println("WIFI NOT STARTED"); }
   // init ESP NOW
-  if (esp_now_init() != ESP_OK) { Serial.println("ESPNOW NOT STARTING") }
+  if (esp_now_init() != ESP_OK) { Serial.println("ESPNOW NOT STARTING"); }
 
   // register and add ground
   memcpy(groundInfo.peer_addr, MAC, 6);
   groundInfo.channel = 0;
   groundInfo.encrypt = false;
-  if (esp_now_add_peer(&groundInfo) != ESP_OK) { Serial.println("CANSAT NOT FOUND") }
+  if (esp_now_add_peer(&groundInfo) != ESP_OK) { Serial.println("CANSAT NOT FOUND"); }
   // register callback function
   esp_now_register_recv_cb(esp_now_recv_cb_t(onDataRecv));
 }
@@ -46,5 +46,5 @@ void send() {
 }
 
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
-  Serial.println(incomingData)
+  Serial.println(incomingData);
 }
