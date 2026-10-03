@@ -41,8 +41,8 @@ Adafruit_BNO055 bnoSensor = Adafruit_BNO055(55, 0x28, &Wire);
 SFE_UBLOX_GNSS GNSS;
 
 // Other pins
-const int operationLight = 27;
-const int buzzer = 26;
+const int operationLight = 18;
+const int buzzer = 19;
 const int releasePin = 25;
 const int panelServoPin = 24;
 const int panelAInputPin = 36;
@@ -66,8 +66,8 @@ float initalPressure;
 float batteryVoltage;
 float panelAVolt;
 float panelBVolt;
-int morseUnit = 500;    // in ms
-byte mechState = 0x00;
+int morseUnit = 10;    // in ms
+String mechState = "0x00";
 float PEtimeStarted = 0;
 
 float gyroX;
@@ -100,7 +100,7 @@ void saveTransmitData();
 void panelExtend();
 void release();
 
-void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len);           // TODO: when command is received, appropiate action is taken; async trigger function; ESPNOW
+void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len);
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
 void alert(int num = 99);
@@ -108,13 +108,14 @@ void beep(int time);
 
 int xTomV(int bits);
 
-enum stage {
+typedef enum {
   launchPad,
   ascent,
   apogee,
   descent,
   landed
-}
+} stage;
+
 String stageNames[5] = {
   "launchPad",
   "ascent",
@@ -123,22 +124,22 @@ String stageNames[5] = {
   "landed"
 }
 
-flightState();
+void flightState();
 
 stage curStage;
 
 
-int setup() {
+void setup() {
+  pinMode(buzzer, OUTPUT);
 
   // Set up ESP-NOW / Wifi
   Serial.begin(115200);
+  Serial.println("BEEEEEEEEEEEP");
   // start Wifi
   WiFi.mode(WIFI_STA);  
   while(!WiFi.STA.started()){ delay(100); }
   // init ESP NOW
   if (esp_now_init() != ESP_OK) { alert(1); }
-  
-  esp_now_register_send_cb(esp_now_send_cb_t(onDataSent));
 
   // register and add ground
   memcpy(groundInfo.peer_addr, MAC, 6);
@@ -178,12 +179,6 @@ int setup() {
   GNSS.setI2COutput(COM_TYPE_UBX); // Sets output to UBX only instead of the standard NMEA
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
 
-  // Start buzzer
-  pinMode(buzzer, OUTPUT);
-  digitalWrite(buzzer, HIGH);
-  delay(1000);
-  digitalWrite(buzzer, LOW);
-
   // set up servos
   releaseServo.attach(releasePin);
   panelServo.attach(panelServoPin);
@@ -194,50 +189,60 @@ int setup() {
   // set up panel voltage readers
   analogSetAttenuation(ADC_0db);
 
+  beep(1000);
+
   curStage = launchPad;
-}
+} 
 
 
 void loop() {
-  sampleSensors();
 
-  saveTransmitData();
+  // run at 4 Hz (0.25 seconds rate)
+  if ((millis() - lastTransmission) > 250) {
+
+    lastTransmission = millis(); // having it up here keeps the scheduling on time marginally better
+    sampleSensors();
+    saveTransmitData();
+
+  }
+
   flightState();
+
 }
 
 
-void flightState{
-  switch stage:
-    case launchPad:
+void flightState(){
+  switch (curStage) {
+    case (launchPad):
 
       if (altitude >= 10) {
-        stage = "ascent";
+        curStage = ascent;
       }
       break;
 
-    case ascent:
+    case (ascent):
 
       // when at desired height
       if (altitude >= 530) {
-        stage = "apogee";
+        curStage = apogee;
       }
       break;
 
-    case apogee:
+    case (apogee):
 
       release();
       PEtimeStarted = millis();
 
-      stage = descent;
+      curStage = descent;
       break;
 
-    case descent:
+    case (descent):
 
       // when stops falling
       if (altitude <= 10 || velocity < 1.8) {
 
         digitalWrite(buzzer, HIGH);
-        stage = "landed";
+        curStage = landed;
 
       }
 
@@ -246,8 +251,9 @@ void flightState{
       }
       break;
 
-    case landed:
+    case (landed):
       break;
+  }
 
 }
 
@@ -295,19 +301,19 @@ void sampleSensors() {
 void release() {
   if (released) { return; }
 
-  releaseServo.write(90-  );
+  releaseServo.write(90);
 }
 
 
 void panelExtend() {
   if (panelExtended) { return; }
 
-  panelServo.write(90-panelExtensionAmount);
+  panelServo.write(panelExtensionAmount);
   mechState = 0x11;
   panelExtended = true;
 }
 
-
+// r: release | e: extend | a: alert | s#: swap stage
 void onDataRecv(
   const esp_now_recv_info_t *info,
   const uint8_t *incomingData,
@@ -325,6 +331,9 @@ void onDataRecv(
     case 'a':
       alert();
       break;
+    case 's':
+      curStage = static_cast<stage>(command[1]);
+      break;
   }
 }
 
@@ -333,7 +342,7 @@ void saveTransmitData() {
   data = "001" + ',' + 
     millis() + ',' + 
     packetCount + ',' + 
-    stage + ',' + 
+    stageNames[curStage] + ',' + 
     mechState + ',' + 
     altitude + ',' + 
     temperature + ',' + 
@@ -350,7 +359,7 @@ void saveTransmitData() {
     panelAVolt + ',' + 
     panelBVolt;
 
-  Serial2.println(data);
+  Serial.println(data);
   
   if (esp_now_send(MAC, (uint8_t *) &data, sizeof(data)) == ESP_OK) {
     // if sent correctly
@@ -363,43 +372,43 @@ void saveTransmitData() {
   // latitude, longitude, satsUsed,gyrox,y,z,accelerationX,accelerationY,accelerationZ,panelVolt1,panelVolt2,,extraData
 }
 
-// plays an error code based on input (default num = 99)
+// ONLY PLAYS IN SETUP plays an error code based on input (default num = 99)
 void alert(int num) {
-  if (num == 99) { // buzzer on
-    digitalWrite(buzzer, HIGH);
-  }
-  else if (num > 5 && num < 10) {
+  // if (num == 99) { // buzzer on
+  //   digitalWrite(buzzer, HIGH);
+  // }
+  // else if (num > 5 && num < 10) {
 
-    for (int i = 0; i < 5; i++) {
+  //   for (int i = 0; i < 5; i++) {
       
-      if (num > 0) {
-        beep(morseUnit);
-        num--;
-      }
-      else {
-        beep(morseUnit*3);
-      }
-      delay(morseUnit);
+  //     if (num > 0) {
+  //       beep(morseUnit);
+  //       num--;
+  //     }
+  //     else {
+  //       beep(morseUnit*3);
+  //     }
+  //     delay(morseUnit);
       
-    }
-  }
-  else {
-    for (int i = 0; i < 5; i++) {
+  //   }
+  // }
+  // else {
+  //   for (int i = 0; i < 5; i++) {
       
-      if (num > 0) {
-        beep(morseUnit*3);
-        num--;
-      }
-      else {
-        beep(morseUnit);
-      }
-      delay(morseUnit);
+  //     if (num > 0) {
+  //       beep(morseUnit*3);
+  //       num--;
+  //     }
+  //     else {
+  //       beep(morseUnit);
+  //     }
+  //     delay(morseUnit);
       
-    }
-  }
+  //   }
+  // }
 }
 
-// beeps for length
+// ONLY PLAYS IN SETUP beeps for length
 void beep(int length) {
   digitalWrite(buzzer, HIGH);
   delay(length);
