@@ -39,7 +39,7 @@ int loop() {
 }
 
 void send() {
-  if (esp_now_send(MAC, (uint8_t *) &data, sizeof(data)) == ESP_OK) {
+  if (esp_now_send(MAC, (uint8_t *) &command, sizeof(command)) == ESP_OK) {
     // if sent correctly
     packetCount++;
   }
