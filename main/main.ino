@@ -2,8 +2,6 @@
 // NOTE: Cannot be uploaded while OpenLog is connected
 //
 // TODO:
-//      add mac addresses
-//      find stack usage of async function with printf included inside and adjust the allocated bytes
 //      Find battery voltage
 //
 // EXTRAS???
@@ -67,8 +65,9 @@ float batteryVoltage;
 float panelAVolt;
 float panelBVolt;
 int morseUnit = 10;    // in ms
-String mechState = "0x00";
+String mechState = "00";
 float PEtimeStarted = 0;
+float lastTransmission = 0;
 
 float gyroX;
 float gyroY;
@@ -116,13 +115,13 @@ typedef enum {
   landed
 } stage;
 
-String stageNames[5] = {
-  "launchPad",
-  "ascent",
-  "apogee",
-  "descent",
-  "landed"
-}
+// String stageNames[5] = {
+//   "launchPad",
+//   "ascent",
+//   "apogee",
+//   "descent",
+//   "landed"
+// }
 
 void flightState();
 
@@ -137,6 +136,7 @@ void setup() {
   // start Wifi
   WiFi.mode(WIFI_STA);  
   while(!WiFi.STA.started()){ delay(100); }
+  // Print the MAC address
   // init ESP NOW
   if (esp_now_init() != ESP_OK) { alert(1); }
 
@@ -188,7 +188,7 @@ void setup() {
   // set up panel voltage readers
   analogSetAttenuation(ADC_0db);
 
-  beep(1000);
+  beep(10);
 
   curStage = launchPad;
 } 
@@ -308,7 +308,7 @@ void panelExtend() {
   if (panelExtended) { return; }
 
   panelServo.write(panelExtensionAmount);
-  mechState = 0x11;
+  mechState = "11";
   panelExtended = true;
 }
 
@@ -341,21 +341,21 @@ void saveTransmitData() {
   data = "001" + ',' + 
     millis() + ',' + 
     packetCount + ',' + 
-    stageNames[curStage] + ',' + 
+    //stageNames[curStage] + ',' + 
     mechState + ',' + 
     altitude + ',' + 
     temperature + ',' + 
-    batteryVoltage + ',' + 
-    latitude + ',' + 
-    longitude + ',' + 
-    satsUsed + ',' + 
-    gyroX + ',' +
-    gyroY + ',' +
-    gyroZ + ',' +
-    accelerationX + ',' + 
-    accelerationY + ',' + 
-    accelerationZ + ',' + 
-    panelAVolt + ',' + 
+    // batteryVoltage + ',' + 
+    // latitude + ',' + 
+    // longitude + ',' + 
+    // satsUsed + ',' + 
+    // gyroX + ',' +
+    // gyroY + ',' +
+    // gyroZ + ',' +
+    // accelerationX + ',' + 
+    // accelerationY + ',' + 
+    // accelerationZ + ',' + 
+    // panelAVolt + ',' + 
     panelBVolt;
 
   Serial.println(data);
