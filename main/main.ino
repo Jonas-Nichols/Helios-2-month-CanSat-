@@ -29,6 +29,29 @@
 #include <esp_wifi.h>
 
 
+struct dataFormat {
+  char[3] teamId;
+  int packetCount;
+  int curStage;
+  char[3] mechState;
+  float altitude;
+  int temperature;
+  float batteryVoltage;
+  float latitude;
+  float longitude;
+  int satsUsed;
+  float gyroX;
+  float gyroY;
+  float gyroZ;
+  float accelerationX;
+  float accelerationY;
+  float accelerationZ;
+  float panelAVolt;
+  float panelBVolt;
+};
+
+dataFormat data;
+
 // Barometer and Temperature sensor
 Adafruit_BMP3XX bmpSensor; // I2C var for Barometer
 
@@ -55,7 +78,7 @@ Servo panelServo;
 const int panelExtensionAmount = 90;
 bool panelExtended = 0;
 
-String teamId = "001";
+char[3] teamId = "001";
 float altitude = 0;
 int velocity;
 int packetCount = 0;
@@ -65,7 +88,7 @@ float batteryVoltage;
 float panelAVolt;
 float panelBVolt;
 int morseUnit = 10;    // in ms
-String mechState = "00";
+char[3] mechState = "00";
 float PEtimeStarted = 0;
 float lastTransmission = 0;
 
@@ -85,8 +108,7 @@ int satsUsed;
 
 // ESP-NOW
 // teamId, timeElapsed, packetCount, stage, mechState, altitude, temperature, batteryVoltage, latitude, longitude, satsUsed,gyrox,y,z,accelerationX,accelerationY,accelerationZ,panelVolt1,panelVolt2,,extraData
-String data;
-String command;
+char[3] command;
 esp_now_peer_info_t groundInfo;
 // Ground MAC
 uint8_t MAC[] = {
@@ -318,7 +340,7 @@ void onDataRecv(
   const uint8_t *incomingData,
   int len
 ) {
-  command = String((char*)incomingData);
+  command = (char*)incomingData;
 
   switch (command[0]) {
     case 'r':
@@ -338,25 +360,26 @@ void onDataRecv(
 
 
 void saveTransmitData() {
-  data = "001" + ',' + 
-    millis() + ',' + 
-    packetCount + ',' + 
-    //stageNames[curStage] + ',' + 
-    mechState + ',' + 
-    altitude + ',' + 
-    temperature + ',' + 
-    // batteryVoltage + ',' + 
-    // latitude + ',' + 
-    // longitude + ',' + 
-    // satsUsed + ',' + 
-    // gyroX + ',' +
-    // gyroY + ',' +
-    // gyroZ + ',' +
-    // accelerationX + ',' + 
-    // accelerationY + ',' + 
-    // accelerationZ + ',' + 
-    // panelAVolt + ',' + 
-    panelBVolt;
+  data =  = {"001",
+  millis(),
+  packetCount,
+  curStage,
+  mechState,
+  altitude,
+  temperature,
+  batteryVoltage,
+  latitude,
+  longitude,
+  satsUsed,
+  gyroX,
+  gyroY,
+  gyroZ,
+  accelerationX,
+  accelerationY,
+  accelerationZ,
+  panelAVolt,
+  panelBVolt,
+};
 
   Serial.println(data);
   

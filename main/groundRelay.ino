@@ -4,8 +4,28 @@
 
 // ESP-NOW
 // command options: 
+struct dataFormat {
+  char[3] teamId;
+  int packetCount;
+  int curStage;
+  char[3] mechState;
+  float altitude;
+  int temperature;
+  float batteryVoltage;
+  float latitude;
+  float longitude;
+  int satsUsed;
+  float gyroX;
+  float gyroY;
+  float gyroZ;
+  float accelerationX;
+  float accelerationY;
+  float accelerationZ;
+  float panelAVolt;
+  float panelBVolt;
+};
 String command;
-String data;
+dataFormat data;
 
 esp_now_peer_info_t groundInfo;
 uint8_t MAC[] = {
@@ -23,7 +43,7 @@ void setup() {
   // init ESP NOW
   if (esp_now_init() != ESP_OK) { Serial.println("ESPNOW NOT STARTING"); }
 
-  // register and add ground
+  // register and add CanSat
   // memcpy(groundInfo.peer_addr, MAC, 6);
   // groundInfo.channel = 0;
   // groundInfo.encrypt = false;
@@ -40,6 +60,8 @@ void loop() {
   }
 }
 
+
+// r: release | e: extend | a: alert | s#: swap stage
 void send() {
   // if (esp_now_send(MAC, (uint8_t *) &command, sizeof(command)) == ESP_OK) {
   //   // if sent correctly
